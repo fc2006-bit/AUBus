@@ -1,41 +1,40 @@
 import socket
 import threading
+from server.database import init_db, register_user, login_user
 
-HOST = '0.0.0.0'   # Listen on all interfaces
-PORT = 12345       # Any free port
+HOST = '0.0.0.0'
+PORT = 12345
 
 def handle_client(conn, addr):
     print(f"New connection from {addr}")
-    conn.sendall("login or register: ".encode())
-    page = conn.recv(1024).decode()
-    if page.lower() == "register":
-        conn.sendall("Input username: ".encode())
-        username = conn.recv(1024).decode()
-        conn.sendall("Input password: ".encode())
-        password = conn.recv(1024).decode()
-        database[username] = password
-        conn.sendall("User registered successfully. Connection closing.\n".encode())
-    elif page.lower() == "login":
-        conn.sendall("Input username: ".encode())
-        username = conn.recv(1024).decode()
-        if username not in database:
-            conn.sendall("User not found. Connection closing.\n".encode())
+    message = conn.recv(1024).decode()
+    try:
+        fields = message.split(":")
+        if fields[0].lower() == "register":
+            username = fields[1]
+            name = fields[2] 
+            email = fields[3] 
+            password = fields[4]
+            area = fields[5]
+            is_driver = int(fields[6])
+            conn.sendall(register_user(username,name,email,password,area,is_driver).encode())
+        elif fields[0].lower() == "login":
+            username = fields[1]
+            password = fields[2]
+            conn.sendall(login_user(username, password).encode())
         else:
-            conn.sendall("Input password: ".encode())
-            password = conn.recv(1024).decode()
-            if database[username] == password:
-                conn.sendall("Login successful.\n".encode())
-            else:
-                conn.sendall("Incorrect password. Connection closing.\n".encode())
-    conn.sendall("exit".encode())
-    conn.close()
+            conn.sendall("Invalid command.".encode())
+    except:
+        conn.sendall("Error processing request. Connection closing.\n".encode())
+    finally:
+        conn.close()
+
+init_db()
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
 server_socket.listen()
 print(f"Server listening on port {PORT}...")
-
-database = {}
 
 while True:
     conn, addr = server_socket.accept()
