@@ -44,6 +44,6 @@ def login_user(username: str, password: str) -> str:
         result = c.fetchone()
         if not result:
             return "User not found."
-        if result[0] == hashed_pw:
+        if result[0] == password:
             return "Login successful."
         return "Incorrect password."
