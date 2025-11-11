@@ -46,3 +46,32 @@ def login_user(username: str, password: str) -> str:
         if result[0] == password:
             return "Login successful."
         return "Incorrect password."
+def edit_fields(username: str,)-> str:
+    if not fields:
+        return "No fields provided to update."
+        
+    valid_columns = {"name", "password", "area", "is_driver"}
+
+    updates = {k: v for k, v in fields.items() if k in valid_columns}
+
+    if not updates:
+        return "No valid fields to update."
+
+    set_clause = ", ".join(f"{col}=?" for col in updates.keys())
+    values = list(updates.values()) + [username]
+
+    with db_lock:
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                c = conn.cursor()
+                c.execute(f"UPDATE users SET {set_clause} WHERE username=?", values)
+                conn.commit()
+
+                if c.rowcount == 0:
+                    return "User not found."
+
+                return "User updated successfully."
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE constraint" in str(e):
+                return "Email already exists."
+            return f"Database error: {e}"
