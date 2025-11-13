@@ -1,6 +1,6 @@
 import socket
 import threading
-from server.database import init_db, register_user, login_user
+from database import init_db, register_user, login_user, db_lock, edit_fields
 
 HOST = '0.0.0.0'
 PORT = 12345
@@ -22,6 +22,12 @@ def handle_client(conn, addr):
             username = fields[1]
             password = fields[2]
             conn.sendall(login_user(username, password).encode())
+        elif fields[0].lower() == "editprofile":
+            username = fields[1]
+            full_name = fields[2]
+            area = fields[3]
+            is_driver = int(fields[4])
+            conn.sendall(edit_fields(username, full_name, area, is_driver).encode())
         else:
             conn.sendall("Invalid command.".encode())
     except:
