@@ -7,23 +7,26 @@ db_lock = threading.Lock()
 
 def init_db():
     with sqlite3.connect(DB_FILE) as conn:
-    c.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE,
-    password TEXT NOT NULL,
-    area TEXT,
-    is_driver INTEGER NOT NULL DEFAULT 0,
-    mon_commute TEXT DEFAULT '[]',
-    tue_commute TEXT DEFAULT '[]',
-    wed_commute TEXT DEFAULT '[]',
-    thu_commute TEXT DEFAULT '[]',
-    fri_commute TEXT DEFAULT '[]',
-    sat_commute TEXT DEFAULT '[]',
-    sun_commute TEXT DEFAULT '[]'
-)
-""")
+        c = conn.cursor()
+        c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE,
+        password TEXT NOT NULL,
+        area TEXT,
+        is_driver INTEGER NOT NULL DEFAULT 0,
+        mon_commute TEXT DEFAULT '[]',
+        tue_commute TEXT DEFAULT '[]',
+        wed_commute TEXT DEFAULT '[]',
+        thu_commute TEXT DEFAULT '[]',
+        fri_commute TEXT DEFAULT '[]',
+        sat_commute TEXT DEFAULT '[]',
+        sun_commute TEXT DEFAULT '[]'
+                ,rating REAL NOT NULL DEFAULT 5.0,
+                rating_count INTEGER NOT NULL DEFAULT 0
+    )
+    """)
         conn.commit()
 
 def register_user(username: str, name: str, email: str, password: str,
@@ -63,7 +66,7 @@ def register_user(username: str, name: str, email: str, password: str,
                 return "Username or email already exists."
             return f"Database error: {e}"
         except sqlite3.Error as e:
-            return f"Database error: {e}
+            return f"Database error: {e}"
 
         
 def login_user(username: str, password: str) -> str:
@@ -113,4 +116,58 @@ def edit_fields(username: str, fields: dict) -> str:
         except sqlite3.IntegrityError as e:
             if "UNIQUE constraint" in str(e):
                 return "Email already exists."
+            return f"Database error: {e}"
+def search_valid_drivers(area: str, day: str, time: str, min_rating: float = 0.0):
+    """
+    Search for eligible drivers in a specific area and day whose commute includes the given time.
+    Drivers must have:
+      - is_driver = 1
+      - matching area
+      - rating >= min_rating
+      - a (start, end) commute interval that includes 'time'
+    """
+    with db_lock:
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                c = conn.cursor()
+
+                # Validate the day argument
+                valid_days = ["mon_commute", "tue_commute", "wed_commute",
+                              "thu_commute", "fri_commute", "sat_commute", "sun_commute"]
+                if day not in valid_days:
+                    return "Invalid day provided."
+
+                # Query all eligible drivers in the same area and above rating threshold
+                c.execute(f"""
+                    SELECT username, name, area, {day}
+                    FROM users
+                    WHERE is_driver = 1 AND area = ? AND rating >= ?
+                """, (area, min_rating))
+
+                drivers = []
+                for username, name, driver_area, commute_json in c.fetchall():
+                    try:
+                        commutes = json.loads(commute_json or "[]")  # Parse commute JSON
+                    except json.JSONDecodeError:
+                        commutes = []
+
+                    # Check if passenger's requested time fits within any (start, end) commute interval
+                    for interval in commutes:
+                        if len(interval) == 2:  # Ensure valid (start, end) pair
+                            start, end = interval
+                            if start <= time <= end:
+                                drivers.append({
+                                    "username": username,
+                                    "name": name,
+                                    "area": driver_area,
+                                    "available_from": start,
+                                    "available_to": end
+                                })
+                                break  # Found a matching slot, stop checking further
+
+                if not drivers:
+                    return "No valid drivers found."
+                return drivers
+
+        except sqlite3.Error as e:
             return f"Database error: {e}"
