@@ -1,15 +1,25 @@
 import socket
 
-HOST = "4.tcp.eu.ngrok.io"
-PORT = 15180
+HOST = "5.tcp.eu.ngrok.io"
+PORT = 13482
 
-def send_request(request: str) -> str:
-    """Send a request to the TCP server and return the response."""
+def open_connection():
+    """Establish a TCP connection to the server."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((HOST, PORT))
+    return s
+
+def send_request(s: socket.socket, data: str):
+    """Send data to the server through the given socket."""
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((HOST, PORT))
-            s.sendall(request.encode())
-            response = s.recv(2048).decode()
-            return response
+        s.sendall(data.encode())
+        response = s.recv(2048).decode()
+        return response
     except Exception as e:
         return f"Connection error: {e}"
+    
+def close_connection(s: socket.socket):
+    """Close the given socket connection."""
+    s.close()
+
+open_connection()
