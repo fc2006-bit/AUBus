@@ -9,25 +9,23 @@ def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
         c.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE,
-        password TEXT NOT NULL,
-        area TEXT,
-        is_driver INTEGER NOT NULL DEFAULT 0,
-        mon_commute TEXT DEFAULT '[]',
-        tue_commute TEXT DEFAULT '[]',
-        wed_commute TEXT DEFAULT '[]',
-        thu_commute TEXT DEFAULT '[]',
-        fri_commute TEXT DEFAULT '[]',
-        sat_commute TEXT DEFAULT '[]',
-        sun_commute TEXT DEFAULT '[]'
-                ,rating REAL NOT NULL DEFAULT 5.0,
-                rating_count INTEGER NOT NULL DEFAULT 0
-    )
-    """)
-        conn.commit()
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE,
+            password TEXT NOT NULL,
+            area TEXT,
+            is_driver INTEGER NOT NULL DEFAULT 0,
+            mon_commute TEXT DEFAULT '[]',
+            tue_commute TEXT DEFAULT '[]',
+            wed_commute TEXT DEFAULT '[]',
+            thu_commute TEXT DEFAULT '[]',
+            fri_commute TEXT DEFAULT '[]',
+            sat_commute TEXT DEFAULT '[]',
+            sun_commute TEXT DEFAULT '[]'
+        )
+        """)
+        conn.commit()  
 
 def register_user(username: str, name: str, email: str, password: str,
                   area: str = None, is_driver: int = 0, commute_schedule: dict = None) -> str:
@@ -72,13 +70,24 @@ def register_user(username: str, name: str, email: str, password: str,
 def login_user(username: str, password: str) -> str:
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
-        c.execute("SELECT password FROM users WHERE username=?", (username,))
+        c.execute("""
+            SELECT username, name, email, area, is_driver, password
+            FROM users WHERE username=?
+        """, (username,))
         result = c.fetchone()
+
         if not result:
-            return "User not found."
-        if result[0] == password:
-            return "Login successful."
-        return "Incorrect password."
+            return "error:User not found."
+
+        stored_username, name, email, area, is_driver, stored_password = result
+
+        if stored_password != password:
+            return "error:Incorrect password."
+
+        # ✅ Return the expected full response
+        return f"success:{name}:{email}:{area}:{is_driver}"
+
+
 def edit_fields(username: str, fields: dict) -> str:
     if not fields:
         return "No fields provided to update."
@@ -117,6 +126,7 @@ def edit_fields(username: str, fields: dict) -> str:
             if "UNIQUE constraint" in str(e):
                 return "Email already exists."
             return f"Database error: {e}"
+
 def search_valid_drivers(area: str, day: str, time: str, min_rating: float = 0.0):
     """
     Search for eligible drivers in a specific area and day whose commute includes the given time.
