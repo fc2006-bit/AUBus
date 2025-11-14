@@ -48,7 +48,7 @@ class ProfilePage(QWidget):
         layout.addWidget(request_ride_button)
 
         self.driver_dashboard_button = QPushButton("Driver dashboard")
-        self.d = DriverDashboardPage()
+        self.d = DriverDashboardPage(self.person)
         self.driver_dashboard_button.clicked.connect(lambda: self.d.show())
         layout.addWidget(self.driver_dashboard_button)
         self.driver_dashboard_button.hide()
