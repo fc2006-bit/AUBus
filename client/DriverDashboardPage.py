@@ -1,31 +1,49 @@
-from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox, QCalendarWidget
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox, QCheckBox, QGridLayout
+from PyQt5.QtCore import Qt
 
 class DriverDashboardPage(QWidget):
-    def __init__(self):
+    def __init__(self, person):
         super().__init__()
-        self.setWindowTitle("Driver Dashboard")
+        self.person=person
 
         title = QLabel("Driver Dashboard")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 20px; font-weight: bold;")
 
-        calendar_label = QLabel("Select the days you go to AUB:")
-        self.calendar = QCalendarWidget()
-        self.calendar.setGridVisible(True)
-        self.calendar.setMinimumDate(QDate.currentDate())
+        info_label = QLabel("Select the days you drive to AUB and enter times for each day:")
+        info_label.setAlignment(Qt.AlignLeft)
 
-        self.selected_date_label = QLabel("Selected date: None")
-        self.calendar.selectionChanged.connect(self.update_selected_date)
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Day"), 0, 0)
+        grid.addWidget(QLabel("To AUB"), 0, 1)
+        grid.addWidget(QLabel("From AUB"), 0, 2)
+
+        self.schedule = {}
+
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        row = 1
+        for day in days:
+            check = QCheckBox(day)
+            to_edit = QLineEdit()
+            from_edit = QLineEdit()
+            self.schedule[day] = {"check": check, "to": to_edit, "from": from_edit}
+            grid.addWidget(check, row, 0)
+            grid.addWidget(to_edit, row, 1)
+            grid.addWidget(from_edit, row, 2)
+            row+=1
+
+        availability = self.person.availability
+        for day, widgets in self.schedule.items():
+            if day in availability:
+                widgets["check"].setChecked(True)
+                widgets["to"].setText(availability[day].get("to", ""))
+                widgets["from"].setText(availability[day].get("from", ""))
 
         form = QFormLayout()
-        self.departure_time = QLineEdit()
-        self.return_time = QLineEdit()
         self.min_rating = QLineEdit()
-
-        form.addRow("Departure time (to AUB):", self.departure_time)
-        form.addRow("Return time (from AUB):", self.return_time)
         form.addRow("Minimum passenger rating:", self.min_rating)
+
+        self.min_rating.setText(str(self.person.min_passenger_rating))
 
         buttons = QHBoxLayout()
         self.save_button = QPushButton("Save Availability")
@@ -40,29 +58,28 @@ class DriverDashboardPage(QWidget):
 
         layout = QVBoxLayout()
         layout.addWidget(title)
-        layout.addWidget(calendar_label)
-        layout.addWidget(self.calendar)
-        layout.addWidget(self.selected_date_label)
+        layout.addSpacing(10)
+        layout.addWidget(info_label)
+        layout.addLayout(grid)
+        layout.addSpacing(10)
         layout.addLayout(form)
         layout.addSpacing(10)
         layout.addLayout(buttons)
         layout.addStretch(1)
+
         self.setLayout(layout)
 
-    def update_selected_date(self):
-        date = self.calendar.selectedDate().toString("dddd, MMMM d, yyyy")
-        self.selected_date_label.setText(f"Selected date: {date}")
-
     def save_availability(self):
-        date = self.calendar.selectedDate().toString("yyyy-MM-dd")
-        dep = self.departure_time.text().strip()
-        ret = self.return_time.text().strip()
-        rating = self.min_rating.text().strip()
+        self.person.availability = {}
 
-        QMessageBox.information(
-            self,
-            "Saved",
-            f"Availability saved for {date}\n"
-            f"Departure: {dep}\nReturn: {ret}\nMin rating: {rating}\n\n"
-            "(Backend connection pending.)"
-        )
+        for day, widgets in self.schedule.items():
+            if widgets["check"].isChecked():
+                to_time = widgets["to"].text()
+                from_time = widgets["from"].text()
+                self.person.availability[day] = {"to": to_time, "from": from_time}
+
+        if not self.person.availability:
+            QMessageBox.warning(self, "Error", "Please select at least one day and enter times.")
+            return
+
+        self.person.min_rating = self.min_rating.text()
