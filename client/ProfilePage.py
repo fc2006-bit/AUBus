@@ -52,10 +52,12 @@ class ProfilePage(QWidget):
         self.driver_dashboard_button.clicked.connect(lambda: self.d.show())
         layout.addWidget(self.driver_dashboard_button)
         self.driver_dashboard_button.hide()
+        self.driver_toggle()
 
         sign_out_button = QPushButton("Sign Out")
         sign_out_button.clicked.connect(self.sign_out)
         layout.addWidget(sign_out_button)
+
 
         self.setLayout(layout)
 
