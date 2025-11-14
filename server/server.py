@@ -27,7 +27,9 @@ def handle_client(conn, addr):
             full_name = fields[2]
             area = fields[3]
             is_driver = int(fields[4])
-            conn.sendall(edit_fields(username, full_name, area, is_driver).encode())
+            dict = {"name": full_name, "area": area, "is_driver": is_driver}
+            print(dict)
+            conn.sendall(edit_fields(username, dict).encode())
         else:
             conn.sendall("Invalid command.".encode())
     except:
