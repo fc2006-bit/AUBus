@@ -128,14 +128,6 @@ def edit_fields(username: str, fields: dict) -> str:
             return f"Database error: {e}"
 
 def search_valid_drivers(area: str, day: str, time: str, min_rating: float = 0.0):
-    """
-    Search for eligible drivers in a specific area and day whose commute includes the given time.
-    Drivers must have:
-      - is_driver = 1
-      - matching area
-      - rating >= min_rating
-      - a (start, end) commute interval that includes 'time'
-    """
     with db_lock:
         try:
             with sqlite3.connect(DB_FILE) as conn:
