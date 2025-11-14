@@ -25,9 +25,10 @@ def init_db():
 
             driver_rating REAL NOT NULL DEFAULT 5.0,
             driver_rating_count INTEGER NOT NULL DEFAULT 1,
+            pending_requests TEXT NOT NULL DEFAULT '[]'
             passenger_rating REAL NOT NULL DEFAULT 5.0,
             passenger_rating_count INTEGER NOT NULL DEFAULT 1,
-
+            
             -- commute schedules stored as JSON strings
             mon_commute TEXT DEFAULT '[]',
             tue_commute TEXT DEFAULT '[]',
@@ -296,3 +297,71 @@ def rate_driver(username: str, new_rating: float) -> str:
 def rate_passenger(username: str, new_rating: float) -> str:
     """Public function to rate a passenger."""
     return _rate_user(username, new_rating, "passenger")
+
+
+def get_pending_requests(driver_username: str):
+    """Return the list of pending ride requests for the given driver."""
+
+    with db_lock:
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                c = conn.cursor()
+                c.execute(
+                    "SELECT pending_requests, is_driver FROM users WHERE username=?",
+                    (driver_username,),
+                )
+                row = c.fetchone()
+
+                if not row:
+                    return "Driver not found."
+
+                pending_json, is_driver = row
+                if not is_driver:
+                    return "User is not registered as a driver."
+
+                try:
+                    return json.loads(pending_json or "[]")
+                except json.JSONDecodeError:
+                    return []
+        except sqlite3.Error as e:
+            return f"Database error: {e}"
+
+
+def add_pending_request(driver_username: str, request: dict) -> str:
+    """Append a pending ride request to the driver's queue."""
+
+    request_json = json.dumps(request)
+
+    with db_lock:
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                c = conn.cursor()
+                c.execute(
+                    "SELECT pending_requests, is_driver FROM users WHERE username=?",
+                    (driver_username,),
+                )
+                row = c.fetchone()
+
+                if not row:
+                    return "Driver not found."
+
+                pending_json, is_driver = row
+                if not is_driver:
+                    return "User is not registered as a driver."
+
+                try:
+                    pending_requests = json.loads(pending_json or "[]")
+                except json.JSONDecodeError:
+                    pending_requests = []
+
+                pending_requests.append(json.loads(request_json))
+                c.execute(
+                    "UPDATE users SET pending_requests=? WHERE username=?",
+                    (json.dumps(pending_requests), driver_username),
+                )
+                conn.commit()
+                return "Request added to pending queue."
+        except sqlite3.Error as e:
+            return f"Database error: {e}"
+
+
