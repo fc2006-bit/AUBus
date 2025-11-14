@@ -7,3 +7,5 @@ class Person:
         self.area = ""
         self.is_driver = False
         self.rating = 5.0
+        self.availability = {}
+        self.min_passenger_rating = 0.0
