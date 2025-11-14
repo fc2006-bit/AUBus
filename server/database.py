@@ -1,13 +1,18 @@
 import sqlite3
 import threading
-import json 
+import json
+from typing import Tuple, List, Dict, Any
 
-DB_FILE = 'AUBus.db'
-db_lock = threading.Lock()
+DB_FILE = "AUBus.db"
+db_lock = threading.Lock()  # Prevents race conditions during DB writes
+
 
 def init_db():
+    """Create the users table if it doesn't exist."""
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
+
+        # Main table storing all user info
         c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -16,6 +21,14 @@ def init_db():
             password TEXT NOT NULL,
             area TEXT,
             is_driver INTEGER NOT NULL DEFAULT 0,
+            min_passenger_rating REAL NOT NULL DEFAULT 0.0,   -- rating threshold for drivers
+
+            driver_rating REAL NOT NULL DEFAULT 5.0,
+            driver_rating_count INTEGER NOT NULL DEFAULT 1,
+            passenger_rating REAL NOT NULL DEFAULT 5.0,
+            passenger_rating_count INTEGER NOT NULL DEFAULT 1,
+
+            -- commute schedules stored as JSON strings
             mon_commute TEXT DEFAULT '[]',
             tue_commute TEXT DEFAULT '[]',
             wed_commute TEXT DEFAULT '[]',
@@ -25,96 +38,134 @@ def init_db():
             sun_commute TEXT DEFAULT '[]'
         )
         """)
-        conn.commit()  
 
-def register_user(username: str, name: str, email: str, password: str,
-                  area: str = None, is_driver: int = 0, commute_schedule: dict = None) -> str:
+        conn.commit()
+
+
+def register_user(
+    username: str,
+    name: str,
+    email: str,
+    password: str,
+    area: str = None,
+    is_driver: int = 0,
+    min_passenger_rating: float = 0.0,
+    commute_schedule: Dict[str, List[List[str]]] = None
+) -> str:
+    """Register a new user. Drivers may have commute schedules; passengers do not."""
+
+    days = [
+        "mon_commute", "tue_commute", "wed_commute",
+        "thu_commute", "fri_commute", "sat_commute", "sun_commute"
+    ]
+
     with db_lock:
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 c = conn.cursor()
 
-                days = ["mon_commute", "tue_commute", "wed_commute",
-                        "thu_commute", "fri_commute", "sat_commute", "sun_commute"]
-
+                # Passengers never have commute schedules or passenger rating filters
                 if is_driver != 1:
-                    commute_schedule = {day: [] for day in days}
+                    commute_schedule = {d: [] for d in days}
+                    min_passenger_rating = 0.0
                 else:
+                    # Ensure every day has a list (even if empty)
                     if commute_schedule is None:
-                        commute_schedule = {day: [] for day in days}
+                        commute_schedule = {d: [] for d in days}
                     else:
-                        for day in days:
-                            commute_schedule.setdefault(day, [])
+                        for d in days:
+                            commute_schedule.setdefault(d, [])
 
-                commute_values = [json.dumps(commute_schedule[day]) for day in days]
+                # Convert schedules to JSON strings for SQLite
+                commute_values = [json.dumps(commute_schedule[d]) for d in days]
 
-                c.execute(f"""
-                    INSERT INTO users (
-                        username, name, email, password, area, is_driver,
-                        mon_commute, tue_commute, wed_commute, thu_commute,
-                        fri_commute, sat_commute, sun_commute
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (username, name, email, password, area, is_driver, *commute_values))
+                # Insert new user
+                c.execute("""
+                INSERT INTO users (
+                    username, name, email, password, area, is_driver,
+                    min_passenger_rating,
+                    driver_rating, driver_rating_count,
+                    passenger_rating, passenger_rating_count,
+                    mon_commute, tue_commute, wed_commute, thu_commute,
+                    fri_commute, sat_commute, sun_commute
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    username, name, email, password, area, is_driver,
+                    float(min_passenger_rating),
+                    0.0, 0,           # driver rating + count
+                    0.0, 0,           # passenger rating + count
+                    *commute_values
+                ))
 
                 conn.commit()
+
             return "User registered successfully."
 
         except sqlite3.IntegrityError as e:
-            if "UNIQUE constraint" in str(e):
+            # UNIQUE constraint: username or email already used
+            if "UNIQUE" in str(e):
                 return "Username or email already exists."
             return f"Database error: {e}"
+
         except sqlite3.Error as e:
             return f"Database error: {e}"
 
-        
+
 def login_user(username: str, password: str) -> str:
+    """Validate username/password and return packed user info."""
+
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
-        c.execute("""
-            SELECT username, name, email, area, is_driver, password
-            FROM users WHERE username=?
-        """, (username,))
-        result = c.fetchone()
 
-        if not result:
+        c.execute("""
+        SELECT name, email, area, is_driver, password
+        FROM users WHERE username=?
+        """, (username,))
+
+        row = c.fetchone()
+        if not row:
             return "error:User not found."
 
-        stored_username, name, email, area, is_driver, stored_password = result
+        name, email, area, is_driver, stored_pw = row
 
-        if stored_password != password:
+        if stored_pw != password:
             return "error:Incorrect password."
 
-        # ✅ Return the expected full response
+        # Format expected by your client
         return f"success:{name}:{email}:{area}:{is_driver}"
 
 
-def edit_fields(username: str, fields: dict) -> str:
+def edit_fields(username: str, fields: Dict[str, Any]) -> str:
+    """Update specific user fields (except ratings)."""
+
     if not fields:
         return "No fields provided to update."
-        
+
+    # Allowed fields to edit
     valid_columns = {
-        "name", "password", "area", "is_driver",
+        "name", "password", "area", "is_driver", "min_passenger_rating",
         "mon_commute", "tue_commute", "wed_commute",
         "thu_commute", "fri_commute", "sat_commute", "sun_commute"
     }
 
     updates = {k: v for k, v in fields.items() if k in valid_columns}
-
     if not updates:
         return "No valid fields to update."
 
-    for day in ["mon_commute", "tue_commute", "wed_commute",
-                "thu_commute", "fri_commute", "sat_commute", "sun_commute"]:
-        if day in updates:
-            updates[day] = json.dumps(updates[day])
+    # Convert commute arrays to JSON strings
+    for d in updates:
+        if "commute" in d:
+            updates[d] = json.dumps(updates[d])
 
-    set_clause = ", ".join(f"{col}=?" for col in updates.keys())
+    set_clause = ", ".join(f"{k}=?" for k in updates)
     values = list(updates.values()) + [username]
 
     with db_lock:
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 c = conn.cursor()
+
                 c.execute(f"UPDATE users SET {set_clause} WHERE username=?", values)
                 conn.commit()
 
@@ -122,54 +173,126 @@ def edit_fields(username: str, fields: dict) -> str:
                     return "User not found."
 
                 return "User updated successfully."
+
         except sqlite3.IntegrityError as e:
-            if "UNIQUE constraint" in str(e):
+            if "UNIQUE" in str(e):
                 return "Email already exists."
             return f"Database error: {e}"
 
+        except sqlite3.Error as e:
+            return f"Database error: {e}"
+
+
 def search_valid_drivers(area: str, day: str, time: str, min_rating: float = 0.0):
+    """Find drivers in an area whose commute matches a given time and rating threshold."""
+
+    valid_days = [
+        "mon_commute", "tue_commute", "wed_commute",
+        "thu_commute", "fri_commute", "sat_commute", "sun_commute"
+    ]
+
+    if day not in valid_days:
+        return "Invalid day provided."
+
     with db_lock:
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 c = conn.cursor()
 
-                # Validate the day argument
-                valid_days = ["mon_commute", "tue_commute", "wed_commute",
-                              "thu_commute", "fri_commute", "sat_commute", "sun_commute"]
-                if day not in valid_days:
-                    return "Invalid day provided."
-
-                # Query all eligible drivers in the same area and above rating threshold
+                # Fetch all drivers matching area + rating requirements
                 c.execute(f"""
-                    SELECT username, name, area, {day}
-                    FROM users
-                    WHERE is_driver = 1 AND area = ? AND rating >= ?
+                SELECT username, name, area, {day}, min_passenger_rating
+                FROM users
+                WHERE is_driver = 1
+                  AND area = ?
+                  AND min_passenger_rating <= ?
                 """, (area, min_rating))
 
                 drivers = []
-                for username, name, driver_area, commute_json in c.fetchall():
+
+                for username, name, ar, commute_json, req_rating in c.fetchall():
                     try:
-                        commutes = json.loads(commute_json or "[]")  # Parse commute JSON
-                    except json.JSONDecodeError:
+                        commutes = json.loads(commute_json or "[]")
+                    except:
                         commutes = []
 
-                    # Check if passenger's requested time fits within any (start, end) commute interval
+                    # Check if requested time falls inside any (start, end) interval
                     for interval in commutes:
-                        if len(interval) == 2:  # Ensure valid (start, end) pair
+                        if len(interval) == 2:
                             start, end = interval
                             if start <= time <= end:
                                 drivers.append({
                                     "username": username,
                                     "name": name,
-                                    "area": driver_area,
+                                    "area": ar,
+                                    "min_passenger_rating": req_rating,
                                     "available_from": start,
                                     "available_to": end
                                 })
-                                break  # Found a matching slot, stop checking further
+                                break
 
-                if not drivers:
-                    return "No valid drivers found."
-                return drivers
+                return "No valid drivers found." if not drivers else drivers
 
         except sqlite3.Error as e:
             return f"Database error: {e}"
+
+
+def calculate_rating(current: float, count: int, new: float) -> Tuple[float, int]:
+    """Recalculate average rating given a new rating input."""
+    new = max(0.0, min(5.0, float(new)))  # clamp rating to valid range
+    total = current * count
+
+    count += 1
+    updated = (total + new) / count
+
+    return round(updated, 2), count
+
+
+def _rate_user(username: str, new_rating: float, role: str) -> str:
+    """Internal helper to rate a driver or passenger."""
+
+    rating_col = f"{role}_rating"
+    count_col = f"{role}_rating_count"
+
+    with db_lock:
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                c = conn.cursor()
+
+                # Fetch current rating + count
+                c.execute(f"""
+                SELECT {rating_col}, {count_col}
+                FROM users
+                WHERE username=?
+                """, (username,))
+
+                row = c.fetchone()
+                if not row:
+                    return "User not found."
+
+                current, count = row
+                new_avg, new_count = calculate_rating(current, count, new_rating)
+
+                # Update with new rating
+                c.execute(f"""
+                UPDATE users
+                SET {rating_col} = ?, {count_col} = ?
+                WHERE username = ?
+                """, (new_avg, new_count, username))
+
+                conn.commit()
+
+                return f"{role.capitalize()} rating updated."
+
+        except sqlite3.Error as e:
+            return f"Database error: {e}"
+
+
+def rate_driver(username: str, new_rating: float) -> str:
+    """Public function to rate a driver."""
+    return _rate_user(username, new_rating, "driver")
+
+
+def rate_passenger(username: str, new_rating: float) -> str:
+    """Public function to rate a passenger."""
+    return _rate_user(username, new_rating, "passenger")
