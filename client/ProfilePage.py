@@ -1,109 +1,86 @@
-from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFormLayout, QCheckBox, QDialogButtonBox, QMessageBox
-from RequestRidePage import RequestRidePage
-from DriverDashboardPage import DriverDashboardPage
-from PendingRequestsPage import PendingRequestsPage
-from network import open_connection, send_request, close_connection
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox
+)
+from RegisterPage import RegisterWindow
+from network import send_request, open_connection, close_connection
+from ProfilePage import ProfilePage
+from Person import Person
+from WeatherPage import WeatherPage
 
-class ProfilePage(QWidget):
-    def __init__(self, person):
-        self.socket = open_connection()
+class LoginWindow(QWidget):
+    def __init__(self):
         super().__init__()
-        self.person = person
+
+        self.setWindowTitle("AUBus - Login")
+        self.setGeometry(300, 300, 350, 250)
+
         layout = QVBoxLayout()
 
-        self.edit_button = QPushButton("Edit Profile")
-        self.make_editable = True
-        self.edit_button.clicked.connect(lambda: self.editable())
-        top = QHBoxLayout()
-        top.addStretch()
-        top.addWidget(self.edit_button)
-        layout.addLayout(top)
+        self.label = QLabel("Login to your account")
+        layout.addWidget(self.label)
 
-        self.full_name_field = QLineEdit(person.full_name or person.username)
-        self.full_name_field.setReadOnly(True)
-        self.email_field = QLineEdit(person.email)
-        self.email_field.setReadOnly(True)
-        self.area_field = QLineEdit(person.area)
-        self.area_field.setReadOnly(True)
-        self.driver_checkbox = QCheckBox()
-        self.driver_checkbox.setEnabled(False)
-        self.driver_checkbox.setChecked(person.is_driver == 1)
-        self.driver_checkbox.stateChanged.connect(self.driver_toggle)
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("Username")
+        layout.addWidget(self.username)
 
-        form = QFormLayout()
-        form.addRow("Full name:", self.full_name_field)
-        form.addRow("Email:", self.email_field)
-        form.addRow("Area:", self.area_field)
-        form.addRow("Driver:", self.driver_checkbox)
-        layout.addLayout(form)
+        self.password = QLineEdit()
+        self.password.setPlaceholderText("Password")
+        self.password.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.password)
 
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        self.buttons.accepted.connect(self.save_profile)
-        self.buttons.rejected.connect(self.cancel)
-        layout.addWidget(self.buttons)
-        self.buttons.hide()
+        login_btn = QPushButton("Login")
+        login_btn.clicked.connect(self.login_user)
+        layout.addWidget(login_btn)
 
-        request_ride_button = QPushButton("Request Ride")
-        self.r = RequestRidePage()
-        request_ride_button.clicked.connect(lambda: self.r.show())
-        layout.addWidget(request_ride_button)
+        register_btn = QPushButton("Create Account")
+        register_btn.clicked.connect(self.open_register)
+        layout.addWidget(register_btn)
 
-        self.driver_dashboard_button = QPushButton("Driver dashboard")
-        self.d = DriverDashboardPage(self.person)
-        self.driver_dashboard_button.clicked.connect(lambda: self.d.show())
-        layout.addWidget(self.driver_dashboard_button)
-        self.driver_dashboard_button.hide()
-
-        requests = []
-        self.pending_requests_button = QPushButton("Pending requests")
-        self.p = PendingRequestsPage(requests)
-        self.pending_requests_button.clicked.connect(lambda: self.p.show())
-        layout.addWidget(self.pending_requests_button)
-        self.pending_requests_button.hide()
-        
-        self.driver_toggle()
-
-        sign_out_button = QPushButton("Sign Out")
-        sign_out_button.clicked.connect(self.sign_out)
-        layout.addWidget(sign_out_button)
+        weather_btn = QPushButton("Weather")
+        weather_btn.clicked.connect(self.open_weather)
+        layout.addWidget(weather_btn)
 
         self.setLayout(layout)
 
-    def editable(self):
-        self.make_editable = not self.make_editable
-        self.full_name_field.setReadOnly(self.make_editable)
-        self.area_field.setReadOnly(self.make_editable)
-        self.edit_button.setEnabled(self.make_editable)
-        self.driver_checkbox.setEnabled(not self.make_editable)
-        self.buttons.setVisible(not self.make_editable)
+    def login_user(self):
+        username = self.username.text().strip()
+        password = self.password.text().strip()
 
-    def save_profile(self):
-        self.person.full_name = self.full_name_field.text()
-        self.person.email = self.email_field.text()
-        self.person.area = self.area_field.text()
-        self.person.is_driver = int(self.driver_checkbox.isChecked())
-        send_request(self.socket, f"editprofile:{self.person.username}:{self.person.full_name}:{self.person.area}:{self.person.is_driver}")
-        self.editable()
-
-    def cancel(self):
-        self.full_name_field.setText(self.person.full_name or self.person.username)
-        self.email_field.setText(self.person.email)
-        self.area_field.setText(self.person.area)
-        self.driver_checkbox.setChecked(self.person.is_driver)
-        self.editable()
-
-    def driver_toggle(self):
-        if self.driver_checkbox.isChecked():
-            self.driver_dashboard_button.show()
-            self.pending_requests_button.show()
+        if not username or not password:
+            QMessageBox.warning(self, "Missing Info", "Please fill in all fields.")
+            return
+        
+        message = f"login:{username}:{password}"
+        s = open_connection()
+        response = send_request(s,message)
+        close_connection(s)
+        parts = response.split(":")
+        if parts[0] == "success":
+            self.hide()
+            user = Person()
+            user.username = username
+            user.full_name = parts[1]
+            user.email = parts[2]
+            user.area = parts[3]
+            user.is_driver = bool(int(parts[4]))
+            self.profile_window = ProfilePage(user)
+            self.profile_window.show()
         else:
-            self.driver_dashboard_button.hide()
-            self.pending_requests_button.hide()
+            QMessageBox.critical(self, "Login Failed", parts[1])
 
-    def sign_out(self):
-        QMessageBox.information(self, "Sign Out", "You have been signed out.")
-        close_connection(self.socket)
-        from LoginPage import LoginWindow
-        self.login_window = LoginWindow()
-        self.login_window.show()
+    def open_register(self):
         self.hide()
+        self.register_window = RegisterWindow()
+        self.register_window.show()
+
+    def open_weather(self):
+        self.hide()
+        self.weather_window = WeatherPage()
+        self.weather_window.show()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = LoginWindow()
+    win.show()
+    sys.exit(app.exec_())
