@@ -52,12 +52,19 @@ class ProfilePage(QWidget):
         self.driver_dashboard_button.clicked.connect(lambda: self.d.show())
         layout.addWidget(self.driver_dashboard_button)
         self.driver_dashboard_button.hide()
+
+        requests = []
+        self.pending_requests_button = QPushButton("Pending requests")
+        self.p = PendingRequestsPage(requests)
+        self.pending_requests_button.clicked.connect(lambda: self.p.show())
+        layout.addWidget(self.pending_requests_button)
+        self.pending_requests_button.hide()
+        
         self.driver_toggle()
 
         sign_out_button = QPushButton("Sign Out")
         sign_out_button.clicked.connect(self.sign_out)
         layout.addWidget(sign_out_button)
-
 
         self.setLayout(layout)
 
@@ -87,8 +94,10 @@ class ProfilePage(QWidget):
     def driver_toggle(self):
         if self.driver_checkbox.isChecked():
             self.driver_dashboard_button.show()
+            self.pending_requests_button.show()
         else:
             self.driver_dashboard_button.hide()
+            self.pending_requests_button.hide()
 
     def sign_out(self):
         QMessageBox.information(self, "Sign Out", "You have been signed out.")
