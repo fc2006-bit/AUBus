@@ -6,7 +6,7 @@ from typing import Tuple, List, Dict, Any
 DB_FILE = "AUBus.db"
 db_lock = threading.Lock()  # Prevents race conditions during DB writes
 
-
+ 
 def init_db():
     """Create the users table if it doesn't exist."""
     with sqlite3.connect(DB_FILE) as conn:
