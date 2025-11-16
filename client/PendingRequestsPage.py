@@ -8,6 +8,13 @@ class PendingRequestsPage(QWidget):
         self.request_rows = []
         main_layout = QVBoxLayout()
 
+        top_bar = QHBoxLayout()
+        top_bar.addStretch()
+        btn_refresh = QPushButton("Refresh")
+        btn_refresh.clicked.connect(self.refresh_rows)
+        top_bar.addWidget(btn_refresh)
+        main_layout.addLayout(top_bar)
+
         title = QLabel("Pending Ride Requests")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 18px; font-weight: bold;")
