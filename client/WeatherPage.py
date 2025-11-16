@@ -229,10 +229,3 @@ class WeatherPage(QWidget):
             return date_obj.strftime("%a, %b %d")
         except ValueError:
             return date_str
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    page = WeatherPage()
-    page.show()
-    sys.exit(app.exec_())
