@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox, QCheckBox, QGridLayout
 from PyQt5.QtCore import Qt
+from network import open_connection, send_request, close_connection  # Add these imports
 
 class DriverDashboardPage(QWidget):
     def __init__(self, person):
@@ -10,7 +11,7 @@ class DriverDashboardPage(QWidget):
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 20px; font-weight: bold;")
 
-        info_label = QLabel("Select the days you drive to AUB and enter times for each day:")
+        info_label = QLabel("Select the days you drive to AUB and enter times (24 hour format) for each day:")
         info_label.setAlignment(Qt.AlignLeft)
 
         grid = QGridLayout()
@@ -35,9 +36,12 @@ class DriverDashboardPage(QWidget):
         availability = self.person.availability
         for day, widgets in self.schedule.items():
             if day in availability:
-                widgets["check"].setChecked(True)
-                widgets["to"].setText(availability[day].get("to", ""))
-                widgets["from"].setText(availability[day].get("from", ""))
+                if availability[day]['from']:
+                    widgets["check"].setChecked(True)
+                    widgets["from"].setText(availability[day].get("from", ""))
+                if availability[day]['to']:
+                    widgets["check"].setChecked(True)
+                    widgets["to"].setText(availability[day].get("to", ""))
 
         form = QFormLayout()
         self.min_rating = QLineEdit()
@@ -70,16 +74,39 @@ class DriverDashboardPage(QWidget):
         self.setLayout(layout)
 
     def save_availability(self):
-        self.person.availability = {}
+        days_order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        availability_list = []
 
-        for day, widgets in self.schedule.items():
+        for day in days_order:
+            widgets = self.schedule[day]
+
             if widgets["check"].isChecked():
-                to_time = widgets["to"].text()
-                from_time = widgets["from"].text()
-                self.person.availability[day] = {"to": to_time, "from": from_time}
+                from_time = widgets["from"].text().replace(":", ".")
+                to_time = widgets["to"].text().replace(":", ".")
 
-        if not self.person.availability:
-            QMessageBox.warning(self, "Error", "Please select at least one day and enter times.")
-            return
+                # Make sure times exist if the day is checked
+                if not from_time and not to_time:
+                    QMessageBox.warning(self, "Error", f"Please enter a time for {day}.")
+                    return
 
+                availability_list.append(f"{from_time}-{to_time}")
+            else:
+                availability_list.append("")  # empty slot allowed
+
+        # Convert list to semicolon-separated string
+        availability_str = ";".join(availability_list)
+
+        # Save minimum rating
         self.person.min_rating = self.min_rating.text()
+
+        # Build server message
+        availability_message = (
+            f"update_availability:{self.person.username}:{availability_str}:{self.person.min_rating}"
+        )
+
+        # Send to server
+        s = open_connection()
+        response = send_request(s, availability_message)
+        close_connection(s)
+
+        QMessageBox.information(self, "Availability Update", response)
