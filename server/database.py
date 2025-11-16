@@ -130,7 +130,13 @@ def login_user(username: str, password: str) -> str:
         if not row:
             return "error:User not found."
 
-        name, email, area, is_driver, stored_pw = row
+        (username_db, name, email, stored_pw, area, is_driver,
+         min_passenger_rating,
+         driver_rating, driver_rating_count, pending_requests,
+         passenger_rating, passenger_rating_count,
+         mon_commute, tue_commute, wed_commute, thu_commute,
+         fri_commute, sat_commute, sun_commute) = row
+
 
         # Password incorrect
         if stored_pw != password:
