@@ -18,9 +18,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from LoginPage import LoginWindow
-
-
 WEATHER_CODE_DESCRIPTIONS = {
     0: "Clear sky",
     1: "Mainly clear",
@@ -114,18 +111,13 @@ class WeatherPage(QWidget):
         action_row = QHBoxLayout()
         action_row.addStretch()
         login_button = QPushButton("Go to Login")
-        login_button.clicked.connect(self.open_login)
+        login_button.clicked.connect(self.close)
         action_row.addWidget(login_button)
         main_layout.addLayout(action_row)
 
         self.setLayout(main_layout)
 
         self.load_aub_weather()
-
-    def open_login(self):
-        self.login_window = LoginWindow()
-        self.login_window.show()
-        self.hide()
 
     def search_area_weather(self):
         query = self.area_input.text().strip()
