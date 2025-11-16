@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFormLayout, QCheckBox, QDialogButtonBox, QMessageBox
 from RequestRidePage import RequestRidePage
 from DriverDashboardPage import DriverDashboardPage
+from PendingRequestsPage import PendingRequestsPage
 from network import open_connection, send_request, close_connection
 
 class ProfilePage(QWidget):
