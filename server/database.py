@@ -120,7 +120,7 @@ def login_user(username: str, password: str) -> str:
 
         # Retrieve user info
         c.execute("""
-        SELECT name, email, area, is_driver, password
+        SELECT *
         FROM users WHERE username=?
         """, (username,))
 
