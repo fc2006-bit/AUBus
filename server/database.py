@@ -137,7 +137,9 @@ def login_user(username: str, password: str) -> str:
             return "error:Incorrect password."
 
         # Return packed data to client
-        return f"success:{name}:{email}:{area}:{is_driver}"
+        return f"success:{name}:{email}:{area}:{is_driver}:{min_passenger_rating}:{driver_rating}:
+        {passenger_rating}:{pending_requests}:{driver_rating}:{passenger_requests}:{passenger_rating}: 
+        {mon_commute}:{tue_commute}:{wed_commute}:{thu_commute}:{fri_commute}:{sat_commute}:{sun_commute}"
 
 
 def edit_fields(username: str, fields: Dict[str, Any]) -> str:
