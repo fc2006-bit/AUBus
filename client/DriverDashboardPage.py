@@ -1,11 +1,12 @@
 from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox, QCheckBox, QGridLayout
 from PyQt5.QtCore import Qt
-from network import open_connection, send_request, close_connection  # Add these imports
+from network import open_connection, send_request, close_connection
+import re  # Import regular expressions for time validation
 
 class DriverDashboardPage(QWidget):
     def __init__(self, person):
         super().__init__()
-        self.person=person
+        self.person = person
 
         title = QLabel("Driver Dashboard")
         title.setAlignment(Qt.AlignCenter)
@@ -31,7 +32,7 @@ class DriverDashboardPage(QWidget):
             grid.addWidget(check, row, 0)
             grid.addWidget(to_edit, row, 1)
             grid.addWidget(from_edit, row, 2)
-            row+=1
+            row += 1
 
         availability = self.person.availability
         for day, widgets in self.schedule.items():
@@ -73,6 +74,11 @@ class DriverDashboardPage(QWidget):
 
         self.setLayout(layout)
 
+    def is_valid_time(self, time_str):
+        """Validate if the time is in 24-hour format (HH:mm)."""
+        pattern = r'^(?:[01]\d|2[0-3]):[0-5]\d$'
+        return re.match(pattern, time_str) is not None
+
     def save_availability(self):
         days_order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         availability_list = []
@@ -81,15 +87,22 @@ class DriverDashboardPage(QWidget):
             widgets = self.schedule[day]
 
             if widgets["check"].isChecked():
-                from_time = widgets["from"].text().replace(":", ".")
-                to_time = widgets["to"].text().replace(":", ".")
+                from_time = widgets["from"].text()
+                to_time = widgets["to"].text()
 
-                # Make sure times exist if the day is checked
                 if not from_time and not to_time:
                     QMessageBox.warning(self, "Error", f"Please enter a time for {day}.")
                     return
 
-                availability_list.append(f"{from_time}-{to_time}")
+                if from_time and not self.is_valid_time(from_time):
+                    QMessageBox.warning(self, "Error", f"Invalid 'From' time format for {day}. Use 24hr HH:mm format.")
+                    return
+
+                if to_time and not self.is_valid_time(to_time):
+                    QMessageBox.warning(self, "Error", f"Invalid 'To' time format for {day}. Use 24hr HH:mm format.")
+                    return
+
+                availability_list.append(f"{from_time.replace(':', '.')}-{to_time.replace(':', '.')}")
             else:
                 availability_list.append("")  # empty slot allowed
 
