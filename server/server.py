@@ -1,6 +1,6 @@
 import socket
 import threading
-from database import init_db, register_user, login_user, db_lock, edit_fields  # Removed update_availability import
+from database import init_db, register_user, login_user, db_lock, edit_fields, search_valid_drivers
 import json
 
 
@@ -48,7 +48,7 @@ def handle_client(conn, addr):
 
             for i, day in enumerate(days_order):
                 entry = parts[i]
-                if entry:   # if not empty
+                if entry:
                     from_time, to_time = entry.split("-")
                     availability[day] = {
                         "from": from_time.replace(".", ":"),
@@ -68,10 +68,15 @@ def handle_client(conn, addr):
                 "min_passenger_rating": min_rating
             }
 
-            print("Parsed availability:", availability)
-
             response = edit_fields(username, update_fields)
             conn.sendall(response.encode())
+        elif fields[0].lower() == "request_ride":
+            area = fields[1]
+            day = fields[2] + "_commute"
+            ride_time = fields[3]
+            min_rating = fields[4]
+            drivers = search_valid_drivers(area, day, ride_time, min_rating)
+            print(f"Found drivers: {drivers}")
 
         else:
             conn.sendall("Invalid command.".encode())
