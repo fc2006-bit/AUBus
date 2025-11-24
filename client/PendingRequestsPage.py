@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame
 from PyQt5.QtCore import Qt
+from RatingPage import RatingPage
 
 class PendingRequestsPage(QWidget):
     def __init__(self, requests):
@@ -140,6 +141,8 @@ class PendingRequestsPage(QWidget):
             self.requests.remove(req)
     
         self.refresh_rows()
+        self.ratingPage = RatingPage()
+        self.ratingPage.show()
 
     def cancel_request(self):
         btn = self.sender()
