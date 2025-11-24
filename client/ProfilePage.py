@@ -2,15 +2,17 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QVBoxLayout, QHBoxL
 from RequestRidePage import RequestRidePage
 from DriverDashboardPage import DriverDashboardPage
 from PendingRequestsPage import PendingRequestsPage
+from ActiveRidesPage import ActiveRidesPage
 from network import open_connection, send_request, close_connection
 from PyQt5.QtWidgets import QLabel
 from WeatherPage import WeatherPage
 
 class ProfilePage(QWidget):
-    def __init__(self, person):
+    def __init__(self, person, login_window=None):
         self.socket = open_connection()
         super().__init__()
         self.person = person
+        self.login_window = login_window
         layout = QVBoxLayout()
 
         self.edit_button = QPushButton("Edit Profile")
@@ -53,7 +55,7 @@ class ProfilePage(QWidget):
         self.buttons.hide()
 
         request_ride_button = QPushButton("Request Ride")
-        self.r = RequestRidePage()
+        self.r = RequestRidePage(person)
         request_ride_button.clicked.connect(lambda: self.r.show())
         layout.addWidget(request_ride_button)
 
@@ -63,12 +65,18 @@ class ProfilePage(QWidget):
         layout.addWidget(self.driver_dashboard_button)
         self.driver_dashboard_button.hide()
 
-        requests = []
         self.pending_requests_button = QPushButton("Pending requests")
-        self.p = PendingRequestsPage(requests)
-        self.pending_requests_button.clicked.connect(lambda: self.p.show())
+        self.pending_requests_page = PendingRequestsPage(
+            self.person.username, self.person.full_name or self.person.username
+        )
+        self.pending_requests_button.clicked.connect(lambda: self.pending_requests_page.show())
         layout.addWidget(self.pending_requests_button)
         self.pending_requests_button.hide()
+
+        self.active_rides_button = QPushButton("Active rides")
+        self.active_rides_page = ActiveRidesPage(self.person.username)
+        self.active_rides_button.clicked.connect(lambda: self.active_rides_page.show())
+        layout.addWidget(self.active_rides_button)
         
         self.driver_toggle()
 
@@ -120,9 +128,15 @@ class ProfilePage(QWidget):
     def sign_out(self):
         QMessageBox.information(self, "Sign Out", "You have been signed out.")
         close_connection(self.socket)
-        from LoginPage import LoginWindow
-        self.login_window = LoginWindow()
-        self.login_window.show()
+        if self.login_window:
+            self.login_window.show()
+            self.login_window.raise_()
+            self.login_window.activateWindow()
+            self.login_window.session_closed(self)
+        else:
+            from LoginPage import LoginWindow
+            self.login_window = LoginWindow()
+            self.login_window.show()
         self.hide()
 
     def open_weather(self):
