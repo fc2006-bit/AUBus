@@ -6,6 +6,7 @@ from network import open_connection, send_request, close_connection
 class RequestRidePage(QWidget):
     def __init__(self, person):
         super().__init__()
+        self.person = person
         self.setWindowTitle("Request Ride Page")
         layout = QVBoxLayout()
 
@@ -71,7 +72,13 @@ class RequestRidePage(QWidget):
             return
 
         s = open_connection()
-        message = f"request_ride:{area}:{selected_day.lower()}:{ride_time}:{min_rating}"
+        passenger = getattr(self.person, "username", "").strip()
+        if not passenger:
+            QMessageBox.critical(self, "Request Ride Page", "Unable to determine passenger username.")
+            return
+
+        hour, minute = ride_time.split(":")
+        message = f"request_ride:{passenger}:{area}:{selected_day.lower()}:{hour}:{minute}:{min_rating}"
         response = send_request(s, message)
         close_connection(s)
         QMessageBox.information(self, "Request Ride Page", "Request submitted. Waiting for driver.")
