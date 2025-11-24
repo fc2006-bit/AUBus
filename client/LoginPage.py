@@ -14,6 +14,7 @@ class LoginWindow(QWidget):
 
         self.setWindowTitle("AUBus - Login")
         self.setGeometry(300, 300, 350, 250)
+        self.sessions = []  # keep track of open profile windows
 
         layout = QVBoxLayout()
 
@@ -51,51 +52,46 @@ class LoginWindow(QWidget):
         s = open_connection()
         response = send_request(s, message)
         close_connection(s)
-        parts = response.split(":", 9)
-        if parts[0] == "success":
-            self.hide()
-            user = Person()
-            user.username = username
-            user.full_name = parts[1]
-            user.email = parts[2]
-            user.area = parts[3]
-            user.is_driver = bool(int(parts[4]))
-            self.min_passenger_rating = float(parts[5])
-            user.passenger_rating = float(parts[6])
-            user.driver_rating = float(parts[7])
-            user.pending_requests = parts[8].split(",") if parts[8] else []
-            availability_raw = parts[9]
-            availability_parts = []
-            current = ""
-            brackets = 0
-            for char in availability_raw:
-                if char == ":" and brackets == 0:
-                    availability_parts.append(current)
-                    current = ""
-                else:
-                    current += char
-                
-                if char == '{':
-                    brackets += 1
-                elif char == '}':
-                    brackets -= 1
-            availability_parts.append(current)
 
-            days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        if response.startswith("error:"):
+            error_msg = response.split(":", 1)[1] if ":" in response else "Login failed."
+            QMessageBox.critical(self, "Login Failed", error_msg)
+            return
 
-            availability = {}
+        if not response.startswith("success:"):
+            QMessageBox.critical(self, "Login Failed", "Unexpected server response.")
+            return
 
-            for day, part in zip(days, availability_parts[-7:]):  
-                part = part.strip()
-                if part == "[]":
-                    availability[day] = {"from": None, "to": None}
-                else:
-                    availability[day] = json.loads(part)
-            user.availability = availability
-            self.profile_window = ProfilePage(user)
-            self.profile_window.show()
-        else:
-            QMessageBox.critical(self, "Login Failed", parts[1])
+        payload_raw = response.split(":", 1)[1]
+        try:
+            payload = json.loads(payload_raw)
+        except json.JSONDecodeError:
+            QMessageBox.critical(self, "Login Failed", "Invalid data returned from server.")
+            return
+
+        user = Person()
+        user.username = username
+        user.full_name = payload.get("name") or username
+        user.email = payload.get("email", "")
+        user.area = payload.get("area", "")
+        user.is_driver = 1 if payload.get("is_driver") else 0
+        user.min_passenger_rating = float(payload.get("min_passenger_rating", 0.0))
+        user.passenger_rating = float(payload.get("passenger_rating", 0.0))
+        user.driver_rating = float(payload.get("driver_rating", 0.0))
+        user.pending_requests = payload.get("pending_requests", [])
+        user.availability = payload.get("availability", {})
+        user.active_rides = payload.get("active_rides", [])
+        user.completed_rides = payload.get("completed_rides", [])
+
+        profile_window = ProfilePage(user, login_window=self)
+        profile_window.show()
+        self.sessions.append(profile_window)
+        self.username.clear()
+        self.password.clear()
+
+    def session_closed(self, profile_window):
+        if profile_window in self.sessions:
+            self.sessions.remove(profile_window)
 
     def open_register(self):
         self.hide()
