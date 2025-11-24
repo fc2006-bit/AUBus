@@ -1,7 +1,32 @@
 import socket
 import threading
-from database import init_db, register_user, login_user, db_lock, edit_fields, search_valid_drivers
 import json
+import uuid
+import base64
+from database import (
+    init_db,
+    register_user,
+    login_user,
+    db_lock,
+    edit_fields,
+    search_valid_drivers,
+    add_pending_request,
+    get_pending_requests,
+    delete_pending_request,
+    accept_pending_request,
+    complete_pending_request,
+    get_active_rides,
+    get_completed_rides,
+    add_active_ride,
+    remove_active_ride,
+    add_completed_ride,
+    remove_completed_ride,
+    rate_driver,
+    rate_passenger,
+    get_user_display_name,
+    add_ride_message,
+    get_ride_messages,
+)
 
 
 HOST = '0.0.0.0'
@@ -71,12 +96,134 @@ def handle_client(conn, addr):
             response = edit_fields(username, update_fields)
             conn.sendall(response.encode())
         elif fields[0].lower() == "request_ride":
-            area = fields[1]
-            day = fields[2] + "_commute"
-            ride_time = fields[3]
-            min_rating = fields[4]
+            passenger = fields[1]
+            area = fields[2]
+            day = fields[3] + "_commute"
+            ride_time = f"{fields[4]}:{fields[5]}"
+            min_rating = float(fields[6])
+            passenger_name = get_user_display_name(passenger)
             drivers = search_valid_drivers(area, day, ride_time, min_rating)
             print(f"Found drivers: {drivers}")
+            if isinstance(drivers, str):
+                # No drivers or error message
+                conn.sendall(drivers.encode())
+            else:
+                added = 0
+                failures = []
+                request_id = str(uuid.uuid4())
+                request_payload = {
+                    "id": request_id,
+                    "passenger": passenger,
+                    "passenger_name": passenger_name,
+                    "area": area,
+                    "day": day,
+                    "time": ride_time,
+                    "min_rating": min_rating,
+                    "status": "pending",
+                    "accepted_by": None
+                }
+
+                for d in drivers:
+                    try:
+                        res = add_pending_request(d["username"], request_payload)
+                        if "added" in res.lower() or "request added" in res.lower() or res == "Request added to pending queue.":
+                            added += 1
+                        else:
+                            # treat non-success as failure but continue
+                            failures.append(f"{d['username']}: {res}")
+                    except Exception as e:
+                        failures.append(f"{d.get('username','?')}: {e}")
+
+                resp = f"Request added to {added} driver(s)."
+                if failures:
+                    resp += " Failures: " + "; ".join(failures)
+                print(resp)
+                conn.sendall(resp.encode())
+        elif fields[0].lower() == "get_pending":
+            username = fields[1]
+            result = get_pending_requests(username)
+            if isinstance(result, str):
+                conn.sendall(("error:" + result).encode())
+            else:
+                conn.sendall(("success:" + json.dumps(result)).encode())
+        elif fields[0].lower() == "get_active_rides":
+            username = fields[1]
+            result = get_active_rides(username)
+            if isinstance(result, str):
+                conn.sendall(("error:" + result).encode())
+            else:
+                conn.sendall(("success:" + json.dumps(result)).encode())
+        elif fields[0].lower() == "get_completed_rides":
+            username = fields[1]
+            result = get_completed_rides(username)
+            if isinstance(result, str):
+                conn.sendall(("error:" + result).encode())
+            else:
+                conn.sendall(("success:" + json.dumps(result)).encode())
+        elif fields[0].lower() == "delete_request":
+            username = fields[1]
+            index = int(fields[2])
+
+            result = delete_pending_request(username, index)
+            conn.sendall(result.encode())
+        elif fields[0].lower() == "accept_request":
+            driver_username = fields[1]
+            request_id = fields[2]
+            result = accept_pending_request(driver_username, request_id)
+            conn.sendall(result.encode())
+        elif fields[0].lower() == "end_request":
+            driver_username = fields[1]
+            request_id = fields[2]
+            result = complete_pending_request(driver_username, request_id)
+            conn.sendall(result.encode())
+        elif fields[0].lower() == "rate_passenger":
+            passenger_username = fields[1]
+            try:
+                rating = float(fields[2])
+            except (ValueError, IndexError):
+                conn.sendall("Invalid rating.".encode())
+                return
+            result = rate_passenger(passenger_username, rating)
+            conn.sendall(result.encode())
+        elif fields[0].lower() == "rate_driver_ride":
+            passenger_username = fields[1]
+            driver_username = fields[2]
+            request_id = fields[3]
+            try:
+                rating = float(fields[4])
+            except (ValueError, IndexError):
+                conn.sendall("Invalid rating.".encode())
+                return
+            result = rate_driver(driver_username, rating)
+            if result.lower().startswith("driver rating updated"):
+                remove_completed_ride(passenger_username, request_id)
+            conn.sendall(result.encode())
+        elif fields[0].lower() == "send_message":
+            if len(fields) < 5:
+                conn.sendall("Invalid message payload.".encode())
+                return
+            ride_id = fields[1]
+            sender = fields[2]
+            recipient = fields[3]
+            encoded_msg = fields[4]
+            try:
+                message_text = base64.b64decode(encoded_msg.encode()).decode()
+            except Exception:
+                conn.sendall("Invalid message encoding.".encode())
+                return
+            result = add_ride_message(ride_id, sender, recipient, message_text)
+            conn.sendall(result.encode())
+        elif fields[0].lower() == "get_messages":
+            if len(fields) < 2:
+                conn.sendall("Invalid ride id.".encode())
+                return
+            ride_id = fields[1]
+            result = get_ride_messages(ride_id)
+            if isinstance(result, str):
+                conn.sendall(("error:" + result).encode())
+            else:
+                conn.sendall(("success:" + json.dumps(result)).encode())
+
 
         else:
             conn.sendall("Invalid command.".encode())
