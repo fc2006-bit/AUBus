@@ -11,3 +11,5 @@ class Person:
         self.availability = {}
         self.pending_requests = []
         self.min_passenger_rating = 0.0
+        self.active_rides = []
+        self.completed_rides = []
