@@ -1,12 +1,14 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit
 
+
 class RatingPage(QWidget):
-    def __init__(self):
+    def __init__(self, prompt="Enter Rating (0 to 5):", on_submit=None):
         super().__init__()
 
         self.rating = 0
+        self.on_submit = on_submit
 
-        title = QLabel("Enter Passenger Rating (0 to 5):")
+        title = QLabel(prompt)
         title.setStyleSheet("font-size: 16px; font-weight: bold;")
 
         self.input_field = QLineEdit()
@@ -34,5 +36,6 @@ class RatingPage(QWidget):
             print("Rating must be between 0 and 5.")
             return
         self.rating = value
-        print("Rating submitted:", self.rating)
+        if self.on_submit:
+            self.on_submit(self.rating)
         self.close()
